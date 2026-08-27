@@ -21,25 +21,46 @@ class FileContentExtractionTool(BaseTool):
     @property
     def show_in_stage(self) -> bool:
         # TODO: set as False since we will have custom variant of representation in Stage
-        raise NotImplementedError()
+        return False
 
     @property
     def name(self) -> str:
         # TODO: provide self-descriptive name
-        raise NotImplementedError()
+        return "extract_file_content"
 
     @property
     def description(self) -> str:
         # TODO: provide tool description that will help LLM to understand when to use this tools and cover 'tricky'
         #  moments (not more 1024 chars)
-        raise NotImplementedError()
+        return (
+            "Extracts and returns the text content of an attached file. Supports PDF (text only), "
+            "TXT, CSV (returned as a markdown table), and HTML/HTM (tags stripped). Use this when the "
+            "user has attached a file and you need to read it to answer their question. Large files "
+            "(over 10,000 characters) are paginated: call with page=1 first; if the response ends with "
+            "'**Page #X. Total pages: Y**' and X < Y, call again with page=X+1 to read the next chunk. "
+            "Always pass the exact file_url from the attachment, never a guessed or reconstructed URL."
+        )
 
     @property
     def parameters(self) -> dict[str, Any]:
         # TODO: provide tool parameters JSON Schema:
         #  - file_url is string, required
         #  - page is integer, by default 1, description: "For large documents pagination is enabled. Each page consists of 10000 characters."
-        raise NotImplementedError()
+        return {
+            "type": "object",
+            "properties": {
+                "file_url": {
+                    "type": "string",
+                    "description": "URL of the attached file to extract content from.",
+                },
+                "page": {
+                    "type": "integer",
+                    "default": 1,
+                    "description": "For large documents pagination is enabled. Each page consists of 10000 characters.",
+                },
+            },
+            "required": ["file_url"],
+        }
 
     async def _execute(self, tool_call_params: ToolCallParams) -> str | Message:
         #TODO:
@@ -67,4 +88,37 @@ class FileContentExtractionTool(BaseTool):
         #         LLM that it is not full content and it is pageable)
         # 12. Append content to stage: `f"```text\n\r{content}\n\r```\n\r"` (Will be shown in stage as markdown text)
         # 13. Return `content`
-        raise NotImplementedError()
+        arguments = json.loads(tool_call_params.tool_call.function.arguments)
+        file_url = arguments.get("file_url")
+        page = arguments.get("page", 1)
+
+        stage = tool_call_params.stage
+        stage.append_content("## Request arguments: \n")
+        stage.append_content(f"**File URL**: {file_url}\n\r")
+        if page > 1:
+            stage.append_content(f"**Page**: {page}\n\r")
+        stage.append_content("## Response: \n")
+
+        extractor = DialFileContentExtractor(self.endpoint, tool_call_params.api_key)
+        content = extractor.extract_text(file_url)
+
+        if not content:
+            content = "Error: File content not found."
+        elif len(content) > 10_000:
+            page_size = 10_000
+            total_pages = (len(content) + page_size - 1) // page_size
+
+            if page < 1:
+                page = 1
+
+            if page > total_pages:
+                content = f"Error: Page {page} does not exist. Total pages: {total_pages}"
+            else:
+                start_index = (page - 1) * page_size
+                end_index = start_index + page_size
+                page_content = content[start_index:end_index]
+                content = f"{page_content}\n\n**Page #{page}. Total pages: {total_pages}**"
+
+        stage.append_content(f"```text\n\r{content}\n\r```\n\r")
+
+        return content

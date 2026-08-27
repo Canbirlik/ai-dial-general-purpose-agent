@@ -22,28 +22,80 @@ class ImageGenerationTool(DeploymentTool):
         #    'The image has been successfully generated according to request and shown to user!'
         #    Sometimes models are trying to add generated pictures as well to content (choice), with this instruction
         #    we are notifing LLLM that it was done (but anyway sometimes it will try to add file 😅)
-        raise NotImplementedError()
+        message = await super()._execute(tool_call_params)
+        if not isinstance(message, Message):
+            return message
+
+        if message.custom_content and message.custom_content.attachments:
+            image_attachments = [
+                attachment for attachment in message.custom_content.attachments
+                if attachment.type in ("image/png", "image/jpeg")
+            ]
+
+            choice = tool_call_params.choice
+            for attachment in image_attachments:
+                choice.append_content(f"\n\r![image]({attachment.url})\n\r")
+
+            if not message.content:
+                message.content = StrictStr(
+                    "The image has been successfully generated according to request and shown to user!"
+                )
+
+        return message
 
     @property
     def deployment_name(self) -> str:
         # TODO: provide deployment name for model that you have added to DIAL Core config (dall-e-3)
-        raise NotImplementedError()
+        return "dall-e-3"
 
     @property
     def name(self) -> str:
         # TODO: provide self-descriptive name
-        raise NotImplementedError()
+        return "generate_image"
 
     @property
     def description(self) -> str:
         # TODO: provide tool description that will help LLM to understand when to use this tools and cover 'tricky'
         #  moments (not more 1024 chars)
-        raise NotImplementedError()
+        return (
+            "Generates an image from a text description and shows it directly to the user in the "
+            "chat — you do not need to embed, link, or otherwise reference the image yourself "
+            "afterward, it is already displayed. Write a detailed, vivid prompt describing exactly "
+            "what should appear (subject, style, composition, colors, mood); this model does not "
+            "support iterative refinement, so make the prompt as complete as possible on the first try. "
+            "Only set size/quality when the user has specific requirements; the defaults work well "
+            "otherwise."
+        )
+
     @property
     def parameters(self) -> dict[str, Any]:
         # TODO: provide tool parameters JSON Schema:
         #  - prompt is string, description: "Extensive description of the image that should be generated.", required
         #  - there are 3 optional parameters: https://platform.openai.com/docs/guides/image-generation?image-generation-model=dall-e-3#customize-image-output
         #  - Sample: https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/dall-e?tabs=dalle-3#call-the-image-generation-api
-        raise NotImplementedError()
+        # NOTE: the DIAL core config `dall-e-3` deployment is actually routed to `gpt-image-2-2026-04-21`
+        # (DALL-E-3 was retired on ai-proxy.lab.epam.com), which uses a different parameter set than
+        # DALL-E-3 — confirmed via live 400 errors: no `style` param, and `quality` accepts
+        # low/medium/high/auto rather than standard/hd.
+        return {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Extensive description of the image that should be generated.",
+                },
+                "size": {
+                    "type": "string",
+                    "enum": ["1024x1024", "1536x1024", "1024x1536", "auto"],
+                    "description": "The size of the generated image. Defaults to 'auto'.",
+                },
+                "quality": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "auto"],
+                    "description": "The quality of the generated image. Higher quality creates images "
+                                    "with finer details. Defaults to 'auto'.",
+                },
+            },
+            "required": ["prompt"],
+        }
 

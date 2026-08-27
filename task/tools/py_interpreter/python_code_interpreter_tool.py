@@ -37,7 +37,20 @@ class PythonCodeInterpreterTool(BaseTool):
         # 3. Set _code_execute_tool: Optional[MCPToolModel] as None at start, then iterate through `mcp_tool_models` and
         #    if any of tool model has the same same as `tool_name` then set _code_execute_tool as tool model
         # 4. If `_code_execute_tool` is null then raise error (We cannot set up PythonCodeInterpreterTool without tool that executes code)
-        raise NotImplementedError()
+        self.dial_endpoint = dial_endpoint
+        self.mcp_client = mcp_client
+
+        self._code_execute_tool: Optional[MCPToolModel] = None
+        for mcp_tool_model in mcp_tool_models:
+            if mcp_tool_model.name == tool_name:
+                self._code_execute_tool = mcp_tool_model
+                break
+
+        if self._code_execute_tool is None:
+            raise ValueError(
+                f"Cannot set up PythonCodeInterpreterTool: tool '{tool_name}' was not found "
+                f"among the MCP server tools."
+            )
 
     @classmethod
     async def create(
@@ -51,27 +64,32 @@ class PythonCodeInterpreterTool(BaseTool):
         # 1. Create MCPClient
         # 2. Get tools
         # 3. Create PythonCodeInterpreterTool instance and return it
-        raise NotImplementedError()
+        mcp_client = await MCPClient.create(mcp_url)
+        mcp_tool_models = await mcp_client.get_tools()
+        return cls(mcp_client, mcp_tool_models, tool_name, dial_endpoint)
 
     @property
     def show_in_stage(self) -> bool:
         # TODO: set as False since we will have custom variant of representation in Stage
-        raise NotImplementedError()
+        return False
 
     @property
     def name(self) -> str:
         # TODO: provide `_code_execute_tool` name
-        raise NotImplementedError()
+        assert self._code_execute_tool is not None
+        return self._code_execute_tool.name
 
     @property
     def description(self) -> str:
         # TODO: provide `_code_execute_tool` description
-        raise NotImplementedError()
+        assert self._code_execute_tool is not None
+        return self._code_execute_tool.description
 
     @property
     def parameters(self) -> dict[str, Any]:
         # TODO: provide `_code_execute_tool` parameters
-        raise NotImplementedError()
+        assert self._code_execute_tool is not None
+        return self._code_execute_tool.parameters
 
     async def _execute(self, tool_call_params: ToolCallParams) -> str | Message:
         #TODO:
@@ -107,4 +125,51 @@ class PythonCodeInterpreterTool(BaseTool):
         #     to 1000 chars, it is needed to avoid high costs and context window overload
         # 13. Append to stage response f"```json\n\r{execution_result.model_dump_json(indent=2)}\n\r```\n\r"
         # 14. Return execution result as string (model_dump_json method)
-        raise NotImplementedError()
+        arguments = json.loads(tool_call_params.tool_call.function.arguments)
+        code = arguments.get("code")
+        session_id = arguments.get("session_id")
+
+        stage = tool_call_params.stage
+        stage.append_content("## Request arguments: \n")
+        stage.append_content(f"```python\n\r{code}\n\r```\n\r")
+        if session_id and session_id != "0":
+            stage.append_content(f"**session_id**: {session_id}\n\r")
+        else:
+            stage.append_content("New session will be created\n\r")
+
+        assert self._code_execute_tool is not None
+        raw_result = await self.mcp_client.call_tool(self._code_execute_tool.name, arguments)
+        execution_result = _ExecutionResult.model_validate(json.loads(raw_result))
+
+        if execution_result.files:
+            dial_client = Dial(base_url=self.dial_endpoint, api_key=tool_call_params.api_key)
+            files_home = dial_client.my_appdata_home()
+
+            for file_ref in execution_result.files:
+                file_name = file_ref.name
+                mime_type = file_ref.mime_type
+
+                resource = await self.mcp_client.get_resource(AnyUrl(file_ref.uri))
+                if isinstance(resource, bytes):
+                    resource = resource.decode("utf-8")
+
+                if mime_type.startswith("text/") or mime_type in ("application/json", "application/xml"):
+                    content = resource.encode("utf-8")
+                else:
+                    content = base64.b64decode(resource)
+
+                upload_url = f"files/{(files_home / file_name).as_posix()}"
+                file_metadata = dial_client.files.upload(upload_url, file=(file_name, content, mime_type))
+
+                attachment = Attachment(url=file_metadata.url, type=mime_type, title=file_name)
+                stage.add_attachment(attachment)
+                tool_call_params.choice.add_attachment(attachment)
+
+                file_ref.uri = file_metadata.url
+
+        if execution_result.output:
+            execution_result.output = [output[:1000] for output in execution_result.output]
+
+        stage.append_content(f"```json\n\r{execution_result.model_dump_json(indent=2)}\n\r```\n\r")
+
+        return execution_result.model_dump_json()
