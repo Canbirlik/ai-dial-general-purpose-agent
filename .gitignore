@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Docker runtime data (created by docker-compose volumes)
+core-logs/
+core-data/
+
+# Env / secrets
+.env
+*.local.json
+
+# Editor/OS
+.idea/
+.vscode/
+.DS_Store
