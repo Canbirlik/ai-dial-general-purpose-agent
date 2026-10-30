@@ -24,7 +24,7 @@
       "type": "chat",
       "upstreams": [
         {
-          "endpoint": "https://ai-proxy.lab.epam.com/openai/deployments/gpt-4o/chat/completions",
+          "endpoint": "https://YOUR_DIAL_API_ENDPOINT/openai/deployments/gpt-4o/chat/completions",
           "key": "{YOUR_DIAL_API_KEY}"
         }
       ]
@@ -36,7 +36,7 @@
       "type": "chat",
       "upstreams": [
         {
-          "endpoint": "https://ai-proxy.lab.epam.com/openai/deployments/gpt-image-2-2026-04-21/chat/completions",
+          "endpoint": "https://YOUR_DIAL_API_ENDPOINT/openai/deployments/gpt-image-2-2026-04-21/chat/completions",
           "key": "{YOUR_DIAL_API_KEY}"
         }
       ]
@@ -44,11 +44,11 @@
     "claude-haiku-4-5": {
       "displayName": "Claude Haiku 4.5",
       "endpoint": "http://adapter-dial:5000/openai/deployments/claude-haiku-4-5/chat/completions",
-      "iconUrl": "https://chat.lab.epam.com/themes/anthropic.svg",
+      "iconUrl": "http://localhost:3001/anthropic.svg",
       "type": "chat",
       "upstreams": [
         {
-          "endpoint": "https://ai-proxy.lab.epam.com/openai/deployments/anthropic.claude-haiku-4-5-20251001-v1:0/chat/completions",
+          "endpoint": "https://YOUR_DIAL_API_ENDPOINT/openai/deployments/anthropic.claude-haiku-4-5-20251001-v1:0/chat/completions",
           "key": "{YOUR_DIAL_API_KEY}"
         }
       ]
@@ -56,7 +56,7 @@
   },
   "keys": {
     "dial_api_key": {
-      "project": "TEST-PROJECT",
+      "project": "YOUR_PROJECT",
       "role": "default"
     }
   },
