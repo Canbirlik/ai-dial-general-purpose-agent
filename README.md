@@ -1,165 +1,61 @@
 # General Purpose Agent
 
-**Equipped with:**
-- WEB Search (DuckDuckGo MCP Server. Performs WEB search and content fetching)
-- Python Code Interpreter (MCP Server. A stateful Python code execution environment with Jupyter kernel support)
-- Image Generation (ImageGen model within DIAL Core)
-- File Content Extractor (Extract content from file (PDF, TXT, CSV). Supports basic pagination)
-- RAG Search (Makes RAG search. Indexed files preserve during conversation in Cache)
+A tool-augmented AI agent built with the [DIAL platform](https://github.com/epam/ai-dial) as part of a hands-on learning workshop.
 
-## AFTER ALL THE TASKS DONE - DON'T FORGET TO REMOVE API KEYs FROM core/config.json
+This project explores how an agent can combine multiple capabilities behind a single conversational interface:
 
-## Flow
-<img src="agent_flow.png">
+- **Web search** through a DuckDuckGo MCP server
+- **Python code execution** through an MCP server
+- **Image generation** through a configured model deployment
+- **File content extraction** for PDF, TXT, CSV and other supported formats
+- **Retrieval-Augmented Generation (RAG)** over uploaded documents
 
-## Step 1
-1. Provide implementation for the [agent.py](task/agent.py) according to TODO
-2. Provide implementation for the [app.py](task/app.py) according to TODO. Tools initialization can be skipped, we will add them later
-3. Create System prompt [prompts.py](task/prompts.py)
+## Architecture
 
-4. Configure [DIAL core config](core/config.json):
-   - Add our Agent configuration to `applications`: 
-     - Key is `general-purpose-agent` with such configurations:
-       - displayName = `General Purpose Agent`
-       - description = `eneral Purpose Agent. Equipped with: WEB search (DuckDuckGo via MCP), RAG search (supports PDF, TXT, CSV files), Python Code Interpreter (via MCP), Image Generation (model).`
-       - endpoint = `http://host.docker.internal:5030/openai/deployments/general-purpose-agent/chat/completions`
-       - inputAttachmentTypes = array of `image/png` and `image/jpeg`
-       - forwardAuthToken = `true`
-   - Add to `models`:
-     - Key is `gpt-4o` with such configurations:
-         - displayName = `GPT 4o`
-         - endpoint = `http://adapter-dial:5000/openai/deployments/gpt-4o/chat/completions`
-         - iconUrl = `http://localhost:3001/gpt4.svg`
-         - type = `chat`
-         - upstreams = array with dict of:
-            - endpoint = `https://ai-proxy.lab.epam.com/openai/deployments/gpt-4o/chat/completions`
-            - key = {YOUR_DIAL_API_KEY}
+The agent is exposed through a DIAL application endpoint. Its tools connect to model deployments and MCP services, while Docker Compose provides the local supporting services.
 
-5. Run [docker-compose](docker-compose.yml)
-6. Start [app.py](task/app.py), open http://localhost:3000/ in browser and:
-   - Firstly, in Marketplace check if General Purpose Agent is present and GPT 4o as well
-   - Test that GPT 4o is working: `Hi, what can you do?`
-   - Then test that General Purpose Agent is working: `Hi, what can you do?`
+![General Purpose Agent flow](agent_flow.png)
 
-## Step 2
-**Time to add first tool to extract content from files**
-1. Provide implementation for the [tools/base.py](task/tools/base.py) according to TODO
-2. Now is time to provide first tool implementation -> [tools/files/file_content_extraction_tool.py](task/tools/files/file_content_extraction_tool.py)
-3. Add this tool to [app.py](task/app.py)
-4. Add to [DIAL core config](core/config.json) new supported types `"application/pdf", "text/html", "text/plain", "text/csv"`
-5. Restart [docker-compose](docker-compose.yml)
-6. Test it:
-   - `What can you do?` - should mention that have tool to extract file content
-   - Attach [report.csv](tests/report.csv) and ask: `What is top sale for category A?` - should get file content and provide '1700 on 2025-10-05'
-   - Attach [microwave_manual.txt](tests/microwave_manual.txt) and ask: `How should I clean the plate?` - should use pagination (2-3 tool calls) to fetch content and then should provide the response
+## Learning context and attribution
 
+This repository is my personal fork of the upstream workshop project: [khshanovskyi/ai-dial-general-purpose-agent](https://github.com/khshanovskyi/ai-dial-general-purpose-agent).
 
-## Step 3
-**As you have seen full content extraction from files is not efficient, we need to add RAG search capability to enhance our Agent**
-1. Provide implementation for the [tools/base.py](task/tools/rag/rag_tool.py) according to TODO
-2. Add this tool to [app.py](task/app.py)
-3. Test it:
-   - Attach [microwave_manual.txt](tests/microwave_manual.txt) and ask: `How should I clean the plate?` - should call RAG tool. The main criteria here is that this tool will be called, usually it will try to call the `file_content_extraction_tool`, but after fetching 1st page and seeing that there are more paged it should call RAG tool, also user can indicate to model that RAG tool should be called
-   - Pay attention that tool SYSTEM prompt matters, tool description as well. Configure it to achieve best result!
+I used the workshop material to practise agent design, tool integration, MCP-based services, document processing and RAG. This fork is maintained as a learning and portfolio project; the upstream repository remains the source for the original workshop structure and instructions. The fork's Git history shows changes made here.
 
-## Step 3
-**Now let's add Image generation tool**
+## Technology
 
-**ℹ️ In DIAL we name models and applications as deployments**
+- Python
+- EPAM DIAL / DIAL Core
+- Docker Compose
+- Model deployments through the DIAL adapter
+- Model Context Protocol (MCP)
+- RAG and document processing
 
-1. Add to [DIAL core config](core/config.json) dall-e-3 model:
-   - Key is `dall-e-3` with such configurations:
-     - displayName = `DALL-E-3`
-     - endpoint = `http://adapter-dial:5000/openai/deployments/dall-e-3/chat/completions`
-     - iconUrl = `http://localhost:3001/gpt3.svg`
-     - type = `chat`
-     - upstreams = array with dict of:
-     - endpoint = `https://ai-proxy.lab.epam.com/openai/deployments/dall-e-3/chat/completions`
-     - key = {YOUR_DIAL_API_KEY}
-2. Provide implementation for the [tools/deployment/base.py](task/tools/deployment/base.py) according to TODO
-3. Provide implementation for the [image_generation_tool.py](task/tools/deployment/image_generation_tool.py) according to TODO
-4. Add this tool to [app.py](task/app.py)
-5. **Optionally**, in the [tools/deployment/](task/tools/deployment) folder you can provide WEB search deployment tool, see it https://github.com/khshanovskyi/ai-simple-agent/blob/completed/task/tools/web_search.py
-6. Restart [docker-compose](docker-compose.yml)
-7. Test it:
-   - `Generate picture with smiling cat` - expected result that you will see in stage all request parameters and attached revised prompt and picture, also, generated picture must be shown as content part in choice
-   - If you created WEB search as deployment tool, test with such query: `Search what is the weather in Kyiv now and based on result generate picture that will represent it`
+## Running locally
 
-## Step 4
-**Time to add WEB search (if you added as deployment tool - it is okay, but its not for free, we will make it for free)**
+1. Install Docker and Docker Compose, and prepare a DIAL environment with model deployments you are authorised to use.
+2. Review [core/config.json](core/config.json) and replace every `YOUR_DIAL_API_ENDPOINT`, `YOUR_DIAL_API_KEY` and `YOUR_PROJECT` placeholder with values from your own DIAL environment.
+3. Review [settings/settings.json](settings/settings.json). Set strong, unique encryption values and configure authentication for your environment. Do not use the sample values in production.
+4. Start the supporting services with `docker compose up`.
+5. Start the Python application using the instructions and dependencies in this repository, then open the local DIAL Chat instance configured for your environment.
 
-1. Add to [docker-compose](docker-compose.yml) new service:
-    ```
-    ddg-search:
-      image: khshanovskyi/ddg-mcp-server:latest
-      ports:
-        - "8051:8000"
-      environment:
-        LOG_LEVEL: "INFO"
-        MCP_TRANSPORT: "streamable-http"
-      restart: unless-stopped
-      mem_limit: 512M
-      cpus: 0.5
-    ```
-    Sources: https://github.com/khshanovskyi/duckduckgo-mcp-server
-2. Provide implementation for the [tools/deployment/mcp_client.py](task/tools/mcp/mcp_client.py) according to TODO
-3. Provide implementation for the [tools/deployment/mcp_tool.py](task/tools/mcp/mcp_tool.py) according to TODO
-4. Add all MCP tools from `http://localhost:8051/mcp` to [app.py](task/app.py) as MCPTool
-5. Restart [docker-compose](docker-compose.yml)
-6. Test it:
-   - `Search what is the weather in Kyiv now`
-   - `Who is Arkadiy Dobkin?`
+The application and model endpoints in the sample configuration are illustrative. Adapt ports, deployment names and service URLs to match your local setup.
 
-## Step 5
-**Time to add Code Interpreter**
+## Security notes
 
-LLMs cannot perform real calculations, they are 'assuming'. Also, sometimes we need to analyze data щк make some chart. 
-Because of that ChatGPT has Python Code Interpreter that is running on the ChatGPT side, in Claude it is JS Code Interpreter that is running in browser.
-We will try to implement similar to ChatGPT Python Code Interpreter tool. 
+- Never commit API keys, access tokens, passwords, private endpoints or production configuration.
+- The configuration files contain placeholders; supply credentials locally and keep them out of Git.
+- The `test` identity-provider configuration is for local experimentation only. Configure proper JWT verification and an appropriate identity provider before exposing the service.
+- Use unique secrets for DIAL encryption and authentication. Do not reuse the example values.
+- Review Docker port exposure and network access before running the stack on a shared or public network.
 
-We will use already implemented [PyInterpreter MCP Server](https://github.com/khshanovskyi/mcp-python-code-interpreter/tree/main). 
-Flow: <img src="py_interpreter_flow.png">
+## Repository layout
 
-1. Add to [docker-compose](docker-compose.yml) new service:
-    ```
-      python-interpreter:
-        image: khshanovskyi/python-code-interpreter-mcp-server:latest
-        ports:
-          - "8050:8000"
-        environment:
-          LOG_LEVEL: "INFO"
-        restart: unless-stopped
-        mem_limit: 2G
-        cpus: 2.0
-    ```
-2. Provide implementation for the [tools/deployment/mcp_tool.py](task/tools/mcp/interpreter/python_code_interpreter_tool.py) according to TODO
-3. Add Python Code Interpreter tool to [app.py](task/app.py), url http://localhost:8050/mc
-4. Restart [docker-compose](docker-compose.yml)
-5. Test it:
-    - `What is the sin of 5682936329203?` Should call PyInterpreter and show result
-    - Attach [report.csv](tests/report.csv) and ask: `I need chart bar from this data` - should get file content and then call PyInterpreter, in response should be generated file as attachment that will be able to see
+- `core/` – DIAL Core application and model configuration
+- `settings/` – DIAL Core settings
+- `task/` – agent application, prompts and tool implementations
+- `tests/` – sample files used to exercise document-processing and RAG flows
 
-## Step 6
-**Multi-model**
+## License and upstream
 
-DIAL Platform provides users with Unified API to work with different models. Let's add Anthropic Sonnet model as orchestration model:
-1. Add to [DIAL core config](core/config.json) claude-haiku-4-5:
-    - Key is `claude-haiku-4-5` with such configurations:
-        - displayName = `Claude Sonnet 4.5`
-        - endpoint = `http://adapter-dial:5000/openai/deployments/claude-haiku-4-5/chat/completions`
-        - iconUrl = `https://chat.lab.epam.com/themes/anthropic.svg`
-        - type = `chat`
-        - upstreams = array with dict of:
-        - endpoint = `https://ai-proxy.lab.epam.com/openai/deployments/anthropic.claude-haiku-4-5-20251001-v1:0/chat/completions`
-        - key = {YOUR_DIAL_API_KEY}
-2. Change Orchestration model in [app.py](task/app.py)
-3. Restart [docker-compose](docker-compose.yml)
-4. Test how it works with Sonnet (it is quite too wordy😅)
-
----
-## Finish
-That is all with General Purpose Agent, Congratulate you ❤️
-
----
-
-# <img src="dialx-banner.png">
+Please refer to the [upstream repository](https://github.com/khshanovskyi/ai-dial-general-purpose-agent) for the original workshop context and licensing information. This fork does not claim ownership of upstream material.
